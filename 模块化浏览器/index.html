@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script defer type="module" src="./index.js"></script>
+</head>
+<body>
+    <p>
+        在标签<span id="txt"></span>中设置type="module"属性
+        <br />
+        用来声明./index.js是一个模块化的js文件，这样index.js中就能使用import和export了！！！
+        <br />
+        否则如果不设置type="module"属性，直接在index.js中使用import和export会报错
+        <br />
+        老版本的浏览器是不支持模块化的js文件的，现在的新版本浏览器几乎都支持了，这也是vite能优化dev-server的原因
+    </p>
+    <script>
+        const txt = document.getElementById('txt');
+        txt.innerText = `<script defer type="module" src="./index.js"><\/script>`
+    </script>
+</body>
+</html>
