@@ -18,8 +18,8 @@
     npm create vite和npm innit vite是npm init vite的别名，等同于npm exec create-vite --(这个--有什么用可以看npm的官网，这里不写--也没问题，但与后面的npx create-vite就不完全等价了)，等同于npx create-vite，这个命令会把create-vite这个库安装到某个缓存中，避免全局安装create-vite，然后和上面pnpm/yarn一样塑造出来一个“D:\vite>”的上下文执行create-vite的bin，相当于在执行npm run ...
     对npm详细的介绍可以看[npm中文文档](https://nodejs.cn/npm/cli/v7/commands/npm-exec/)，这个翻译的很好
 2. create-vite对标的不是webpack-cli而是create-reacte-app和vue-cli
-    [vite与create-vite对标](./README_img/create-vite对标.png)
-    
+    ![vite与create-vite对标](./README_img/create-vite对标.png)
+
 ## 深入理解和使用vite
 1. 都说vite只支持es module，细说这里面的内容
     1. 开发环境
