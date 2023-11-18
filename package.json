@@ -4,6 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "serve": "echo 这种方式调用vite时command变量的值是'serve' && vite",
+    "serve:dev": "echo 这种方式调用vite时command变量的值是'serve' && vite dev",
+    "serve:serve": "echo 这种方式调用vite时command变量的值是'serve' && vite serve",
+    "build": "echo 这种方式调用vite时command变量的值是'build' && vite build",
     "start:devServer": "nodemon ./手写开发服务器/server/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

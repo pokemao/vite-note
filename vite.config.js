@@ -24,16 +24,17 @@ import viteDevConfig from "./config/vite.dev.config";
 import viteProConfig from "./config/vite.pro.config";
 import { loadEnv } from "vite";
 import path from "path";
+import fs from 'fs'
 
 const envResolver = {
     "build": () => Object.assign({}, viteBaseConfig, viteProConfig),
     "serve": () => Object.assign({}, viteBaseConfig, viteDevConfig)
 }
 
-export default defineConfig(({commond, mode}) => {
-    // commond === "build" 生产环境
-    // commond === "serve" 开发环境
-    const config = envResolver[commond]()
+export default defineConfig(({command, mode}) => {
+    // commond === "build" 生产环境，在命令行使用vite、vite dev、vite serve命令的时候
+    // commond === "serve" 开发环境，在命令行使用vite build命令的时候
+    const config = envResolver[command]()
 
     // 通过vite提供的loadEnv方法来加载.env.*的文件中的内容
     // vite内部会在不管是通过dev还是在build命令启动的时候，都会自动调用loadEnv这个方法来将环境变量注入到项目中

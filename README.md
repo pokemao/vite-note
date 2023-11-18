@@ -163,7 +163,7 @@
             使用jsDoc
             jsDoc是一个用于JavaScript的API文档生成器，类似于Javadoc或phpDocumentor。它可以将文档注释直接添加到源代码中，就在代码本身旁边。JSDoc工具可以将扫描源代码并为你生成一个HTML文档网站
             ```js
-            // vite.js
+            // vite.example.js
             /**
              * @typedef {Object} OupPutInterface
              * @property {string} filename
@@ -267,6 +267,7 @@
     首先我们要明确，vite这个库的代码中是通过require('vite.config.js')这种方式引入vite.config.js这个文件的，然后vite再使用node对继续处理各种东西，调用esbuild呀，依赖预构建呀什么的，vite这个库做的事情都是在node的环境下完成的
     那么如果在require('vite.config.js')时，vite.config.js里面用的时esm规范，node会不认识这个规范中的关键字，node会对这个js文件编译失败
     所以为了支持在vite.config.js里面写esm规范，vite在require('vite.config.js')这个文件之前先使用node的readFile库读取了这个vite.config.js文件并判断里面是不是cjs2的规范，如果不是就使用esbuild编译js文件的编译器把vite.config.js编译成ast然后使用ast把规范从esm规范转成cjs2规范；或者vite在node环境下(注意我这里不止一次强调是node环境)，直接使用esbuild编译js文件的编译器把vite.config.js编译成ast，再判断vite.config.js文件里面是不是cjs2的规范，如果不是直接使用ast把规范从esm规范转成cjs2规范。然后再通过require('vite.config.js')这种方式引入vite.config.js这个文件。
+    从上面的分析可以知道vite是用fs模块读取了vite.config.js的值的，这一点很关键，因为这个操作可以让vite实现对vite.config.js文件的监控，==实现对vite.config.js的热更新==，所以vite不同于webpack的点还有一个就是：==vite在vite.config.js文件变化的时候不需要重新pnpm serve==。
 4. 环境变量
     vite内置了dotenv这个库对.env文件进行处理
     环境变量是什么？
@@ -319,8 +320,8 @@
     ```js
     // vite.config.js
     export default defineConfig(({commond, mode}) => {
-        // commond === "build" 生产环境
-        // commond === "serve" 开发环境
+        // commond === "build" 生产环境，在命令行使用vite、vite dev、vite serve命令的时候
+        // commond === "serve" 开发环境，在命令行使用vite build命令的时候
         const config = envResolver[commond]()
 
         // 通过vite提供的loadEnv方法来加载.env.*的文件中的内容
@@ -427,7 +428,7 @@
     const { defineConfig } = require('vite')
 
     module.exports = defineConfig({
-        // 这里写基础配置
+        // 配置环境变量的前缀，只有符合这个前缀的环境变量才会被加入到import.meta.env中
         envPrefix: "pokemao"
     })
     // 这个文件中的配置会被merge到vite.config.js中
@@ -464,6 +465,269 @@
     # env/.env.development
     pokemao_BASE_URL = http://mock.api.com
     ```
+5. vite不需要配置就能支持在源代码中引入css文件
+    * 开发模式下的实现支持在源代码中引入css文件方式是什么呢？
+        在开启开发服务器的模式下，开发服务器是如何决定给浏览器响应什么文件呢？
+        是由浏览器的请求决定的对吧，我们之前手写的那个开发服务器是怎么操作的还记得吗？
+        首先浏览器向开发服务器请求html文件，开发服务器收到这个请求之后，根据url的值使用fs模块去读取本地磁盘存储的html文件，读到内存中，然后把存在内存中的buffer响应给前端，前端拿到html文件的数据，然后进行解析渲染。
+        浏览器解析html文件的过程中，发现html文件使用script标签引入了一个js文件，然后浏览器就会根据src的值发起网络请求来向服务器请求这个js文件，开发服务器根据请求的url再使用fs读取本地磁盘存储的某个特定的js文件，然后响应给浏览器，浏览器再去解析执行这个js文件。
+        然后浏览器在解析这个js文件的时候，发现这个js文件通过import指令引入了一个css文件，那么浏览器就会根据import后的相对路径的值发起网络请求来向服务器请求这个css文件，开发服务器根据请求的url再使用fs读取本地磁盘存储的某个特定的css文件，读到内存中，之后服务器不是直接响应css文件了，因为import指令引入的内容会被js引擎解析，如果服务器响应了css文件的话，js引擎解析不了，因为css代码要浏览器来解析(虽然这个网络请求的响应会被浏览器收到之后处理，但是对于import发起的网络请求，浏览器只会判断响应的内容是不是能被js引擎处理。而不会服务器因为响应的类型不是js，浏览器就忘记这个响应是了import请求得到的，然后浏览器就用其他的方式处理了，不可能的，就只能用js引擎处理，但是浏览器会看服务器返回的是不是js，如果不是浏览器直接报错，也就不会交给js引擎处理了，如果是js，浏览器再交给js引擎处理)，这个时候就要用到和我们之前让浏览器准确来说是js引擎能解析vue一样的处理方式了，那就是先把css代码转换成js代码，怎么转换呢？最简单的方式就是用js创建一个style标签，然后把css的全部代码放入这个style标签中，然后用js把这个标签插入header标签里面，再设置服务器响应时的响应体类型Content-Type为text/javascript，然后再将这个转换后的js代码响应给浏览器，浏览器根据Content-Type确定服务器返回的是js代码，然后就能放心的交给js引擎去解析了。
+    * 这种实现方式的优势是什么？
+        优势1：能够轻松实现按需导入，如果浏览器解析的html, css, js代码中没有引入某个文件，浏览器就不会发起请求，也就不会有响应，开发服务器就不需要执行内容，从而加快构建速度
+        优势2：方便实现热更新
+        优势3：方便实现模块化
+    * css模块化的实现原理
+        如果我们想在代码里面开启css模式化的话，就必须把css文件的后缀从.css改成.module.css，只要更改了文件的后缀名，就开启了css模块化，这是一种约定，并且我们还要在我们的js源代码中对这个css文件的引入方式做些更改
+        未开启css模块化
+        ```js
+        import './index.css'
+        ```
+        开启css模块化
+        ```js
+        import style from './index.module.css'
+        ```
+        我们用一个实际的例子来看看`import style from './index.module.css'`返回的style对象是什么
+        ```html
+        <!-- index.html -->
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Document</title>
+            <script type="module" src="./src/index.js"></script>
+        </head>
+        <body>
+
+        </body>
+        </html>
+        ```
+        ```css
+        /** src/common/common.module.css */
+        .wrap {
+            background-color: #ccc;
+        }
+        ```
+        ```js
+        // src/index.js
+        import style from "./common/common.module.css";
+
+        console.log(style);
+
+        style === { wrap: "_wrap_4pfot_1" };
+        ```
+        使用pnpm serve命令开启开发服务器，打开浏览器可以看到浏览器的控制台打印了`{ wrap: "_wrap_4pfot_1" }`，也就是说`style === { wrap: "_wrap_4pfot_1" }`
+        然后我们打开浏览器的控制台查看html标签的情况，就能发现在<head>标签中的<style>标签里面有一个类名规则就叫_wrap_4pfot_1
+        ![浏览器html标签](./README_img/浏览器html标签.png)
+        所以我们之后就可以通过使用_wrap_4pfot_1这个字符串来为某个html元素指定类名了。由于这个字符串是使用hash计算出来的，所以不会与其他module.css文件同样叫wrap的类名冲突了，从而实现了css模块化
+        使用方式如下
+        ```js
+        const div1 = document.getElemetsByTag('div')[0];
+        div1.className = style.wrap // style.wrap === '_wrap_4pfot_1'
+        ```
+        vite是如何做到把module.css文件中的wrap字段替换成_wrap_4pfot_1字段的呢？
+        其实答案都写出来了，就和浏览器的请求过程差不过，只不过在把css代码转换成js代码，然后原来的css代码包装到一个style标签中之前，vite多做了一步字符串替换和hash计算而已，并且vite会把原来的字段如：wrap和替换之后的字段_wrap_4pfot_1的映射关系保存了下来，然后在js代码的最后返回这个映射关系组成的对象，就是{ wrap: "_wrap_4pfot_1" }
+6. vite不用配置就可以支持less、sass等css预处理器
+    vite是可以天生支持less、sass等css预处理器，但是需要我们pnpm安装less、sass等工具才可以
+    为什么需要安装这些工具呢？
+    还是之前的那个过程，浏览器向服务器发起一个想获取less文件的请求是，服务器会自动调用less工具对服务器上的less文件进行编译，转换成css代码之后然后按处理css代码的方式继续处理，最后还是给浏览器响应一个js文件
+7. vite.config.js中配置对css的解析行为
+    1. modules属性——配置模块化时的vite行为
+        1. localsConvention配置
+            我们使用下面的module.css进行讲解这个属性的作用
+            ```css
+            .footer-wrap {
+                background: #333;
+            }
+            ```
+            如果不对vite进行任何配置的话，这个module.css在import styles from 'module.css'语句中生成的style对象是这个样子的{"footer-wrap": "_footer-wrap_[hash]"}，注意这个返回的styles对象的属性名是中横线分割的，所以我们在js代码中想要获取"_footer-wrap_[hash]"这个类名字符串的时候就要使用styles["footer-wrap"]这种形式的调用，这样的调用非常不方便
+            如果我们进行了下面的配置
+            ```js
+            module.exports = defineConfig({
+                // 对vite编译css文件的时候的行为进行配置
+                css: {
+                    // 对vite在处理css模块化的时候的行为进行配置
+                    modules: {
+                        localsConvention: 'camelCaseOnly'
+                    }
+                }
+            })
+            ```
+            这个module.css在import styles from 'module.css'语句中生成的style对象是的样子就变成了{"footerWrap": "_footer-wrap_[hash]"}，这个返回的styles对象的属性名就是驼峰形式的了！！！这样我们在js代码中使用的时候就可以使用styles.footerWrap来获取"_footer-wrap_[hash]"这个字符串了，这样的调用方式就很方便
+        2. scopeBehaviour关闭模块化
+            ```js
+            module.exports = defineConfig({
+                // 对vite编译css文件的时候的行为进行配置
+                css: {
+                    // 对vite在处理css模块化的时候的行为进行配置
+                    modules: {
+                        // 关闭模块化
+                        scopeBehaviour: "global"
+                    }
+                }
+            })
+            ```
+        3. generateScopedName属性配置hash处理过后的类型
+            ```js
+            module.exports = defineConfig({
+                // 对vite编译css文件的时候的行为进行配置
+                css: {
+                    // 对vite在处理css模块化的时候的行为进行配置
+                    modules: {
+                        generateScopedName: '[name]_[local]_[hash:5]' // [name]、[local]、[hash:5]这些占位符代表什么意思要看postcss的文档
+                        generateScopedName: (name, filename, css) => {  // 还可以配置这个属性的值是是一个函数
+                            return 
+                        } 
+                    }
+                }
+            })
+            ```
+        4. hashPrefix属性为css模块化时类名对应的hash值的计算加盐
+            ```js
+            module.exports = defineConfig({
+                // 对vite编译css文件的时候的行为进行配置
+                css: {
+                    // 对vite在处理css模块化的时候的行为进行配置
+                    modules: {
+                        // 使生成的hash更加具有独特性
+                        hashPrefix: "addSalt"
+                    }
+                }
+            })
+            ```
+        5. globalModulePaths配置 不进行css模块化处理的文件
+            默认情况下项目根目录(package.json所在目录)下module.css文件，以及子目录下的module.css文件，都会进行css模块化处理
+            ```js
+            module.exports = defineConfig({
+                // 对vite编译css文件的时候的行为进行配置
+                css: {
+                    // 对vite在处理css模块化的时候的行为进行配置
+                    modules: {
+                        globalModulePaths: [这里面使用相对路径，相对于❓❓❓❓],  // 不想参与到css模块化的module.css文件的路径
+                    }
+                }
+            })
+            ```
+    2. preprocessorOptions
+        ```js
+        module.exports = defineConfig({
+            css: {
+                preprocessorOptions: {
+                    // 对预处理器less这个程序执行时传入的参数进行配置
+                    // 执行时传入的参数是指：使用lessc命令时后面跟的参数
+                    less: {
+                        math: "always", // 相当于使用 lessc --math="always"
+                        // 配置项目中所有的less文件中可以使用的全局变量
+                        globalVars: {
+                            // 在项目中所有的less文件中，css规则的属性值都可以使用@mainColor代替
+                            /**
+                             * 比如：
+                             * .warp {
+                             *  background-color: @mainColor
+                             * }
+                             */
+                            // 经过lessc编译之后生成的css代码就是
+                            /**
+                             * .wrap {
+                             *  background-color: red
+                             * }
+                             */
+                            mainColor: 'red'
+                        }
+                    },
+                    // 对预处理器sass这个程序执行时传入的参数进行配置
+                    sass: {
+                    
+                    }
+                },
+            }
+        })
+        ```
+    3. devSourcemap
+        ```js
+        module.exports = defineConfig({
+            css: {
+                // 开启css文件的sourcemap
+                devSourcemap: true
+            }
+        })
+        ```
+8. vite内置postcss能力
+    1. 使用vite的时候不需要安装postcss这个库
+    2. 对postcss的配置方式
+        * 使用postcss.config.js
+            ```js
+            // postcss.config.js
+            module.exports = {
+                plugins:[
+                    // 内部集成了大量的postcss插件
+                    postcss-preset-env()
+                ]
+            }
+            ```
+        * 在vite.config.js中配置
+            ```js
+            // vite.config.js
+            module.exports = defineConfig({
+                css: {
+                    postcss: {
+                        plugins:[
+                            // 内部集成了大量的postcss插件
+                            postcss-preset-env()
+                        ]
+                    }
+                }
+            })
+            ```
+    3. importFrom
+        再使用postcss的过程中你可能会发现，postcss对css声明的全局变量不能记录下来，比如：
+        ```css
+        /** src/variable.css */
+        :root {
+            --globalColor: red;
+        }
+        ```
+        ```css
+        /** src/style.css */
+        .wrap {
+            background-color: var(--globalColor);
+        }
+        ```
+        经过postcss处理src/style.css之后我们期望看到的结果是
+        ```css
+        /** src/style.css */
+        /** postcss处理后期望的结果 */
+        .wrap {
+            background-color: color;
+            background-color: var(--globalColor);
+        }
+        ```
+        ```css
+        /** src/style.css */
+        /** postcss处理后实际的结果 */
+        .wrap {
+            background-color: var(--globalColor);
+        }
+        ```
+        原因就是postcss没有记住src/variable.css文件中定义的css变量！
+        这个可以通过在postcss属性中配置importFrom属性来解决
+        ```js
+        // vite.config.js
+        module.exports = defineConfig({
+            css: {
+                postcss: {
+                    plugins:[
+                        // 内部集成了大量的postcss插件
+                        postcss-preset-env({
+                            // 这个功能是postcss-preset-env这个库中集成postcss-custom-properties这个库提供的能力
+                            importFrom: path.resolve(__dirname, './src/variable.css')
+                        })
+                    ]
+                }
+            }
+        })
+        ```
+9.  
 
 
 
@@ -471,6 +735,7 @@
 # vite对比webpack的优势
 1.  上手简单，把webpack的大部分loader基本上内置了，不用手动配置，对新手友善 
 2.  pnpm start的时间很短，原因是vite只使用import模块化，即：vite只能用于支持`<script type="module"></script>`的浏览器，所以vite不需要对所有的js文件进行模块化转化；对比webpack，他要把import和require的两种规范转化成自己的webpack_require规范，从而对import和require的模块化都做支持，这种转换势必要花费大量的时间
+3.  vite是用fs模块读取了vite.config.js的值的，这个操作可以让vite实现对vite.config.js文件的监控，==实现对vite.config.js的热更新==，所以vite不同于webpack的点还有一个就是：==vite在vite.config.js文件变化的时候不需要重新pnpm serve==
 
 
 # vite对比webpack的劣势
